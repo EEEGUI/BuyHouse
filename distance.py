@@ -1,18 +1,24 @@
 #!/Users/linkunhui/anaconda3/bin/python3
 
-import requests, json
+import requests
+import json
 import sys
 from time import strftime, localtime
 
 KEY = "5a77cf8b06082b43cf52ce19f58143ec"
+DRIVING = 'driving'
+PUBLIC_TRANSPORT = 'public_transport'
+NAME = 'name'
+DISTANCE = 'distance'
+LOCATION = 'location'
 
 
-def req_location(address):
+def address_to_location(address):
     """
     地址转经纬度
     """
     # TODO CACHE
-    req = f'https://restapi.amap.com/v3/geocode/geo?city=上海市&address={address}&key=5a77cf8b06082b43cf52ce19f58143ec&output=json'
+    req = f'https://restapi.amap.com/v3/geocode/geo?city=上海市&address={address}&key={KEY}&output=json'
     location = json.loads(requests.get(req).text)['geocodes'][0]['location']
     return location
 
@@ -22,11 +28,11 @@ def req_metro_duration(start_loc, end_loc, time=None):
     公共交通时间 / min
     """
     params = {"origin": start_loc
-        , "destination": end_loc
-        , "city": "上海"
-        , "key": KEY
-        , "time": time if time is not None else strftime('%H:%M', localtime())}
-    req = f'https://restapi.amap.com/v3/direction/transit/integrated?%s' % (make_param(params))
+            , "destination": end_loc
+            , "city": "上海"
+            , "key": KEY
+            , "time": time if time is not None else strftime('%H:%M', localtime())}
+    req = f'https://restapi.amap.com/v3/direction/transit/integrated?{generate_param(params)}'
     info = json.loads(requests.get(req).text)
     return int(int(info['route']['transits'][0]['duration']) / 60)
 
@@ -36,38 +42,45 @@ def req_car_duration(start_loc, end_loc, time=None):
     开车时间 / min
     """
     params = {"origin": start_loc
-        , "destination": end_loc
-        , "city": "上海"
-        , "key": KEY
-        , "time": time if time is not None else strftime('%H:%M', localtime())}
-    req = f'https://restapi.amap.com/v3/direction/driving?%s' % (make_param(params))
+            , "destination": end_loc
+            , "city": "上海"
+            , "key": KEY
+            , "time": time if time is not None else strftime('%H:%M', localtime())}
+    req = f'https://restapi.amap.com/v3/direction/driving?{generate_param(params)}'
     info = json.loads(requests.get(req).text)
     return int(int(info['route']['paths'][0]['duration']) / 60)
 
 
-def req_around(location, radius, keywords):
+def search_around(location, radius, keywords):
+    """
+    搜周边
+    """
     params = {"location": location
-        , "radius": radius
-        , "key": KEY
-        , "keywords": keywords
-        , "offset": 100
-        , "page": 1
-        , "extensions": "all"}
-    req = f'https://restapi.amap.com/v3/place/around?%s' % (make_param(params))
+            , "radius": radius
+            , "key": KEY
+            , "keywords": keywords
+            , "offset": 100
+            , "page": 1
+            , "extensions": "all"}
+    req = f'https://restapi.amap.com/v3/place/around?{generate_param(params)}'
     response = json.loads(requests.get(req).text)
+    search_result = []
     for each in response['pois']:
-        print(each['name'], each['distance'], each['location'])
+        search_result.append({NAME: each['name'], DISTANCE: int(each['distance']), LOCATION: each['location']})
+    return sorted(search_result, key=lambda x: x[DISTANCE])
 
 
-# 路径规划
-def route_info(start, end):
-    public = req_metro_duration(req_location(start), req_location(end))
-    driving = req_car_duration(req_location(start), req_location(end))
+def route_info(start_loc, end_loc):
+    """
+    通行时间
+    """
+    public = req_metro_duration(start_loc, end_loc)
+    driving = req_car_duration(start_loc, end_loc)
 
-    return "公交地铁:%s 开车:%s" % (public, driving)
+    return {PUBLIC_TRANSPORT: public, DRIVING: driving}
 
 
-def make_param(argvs):
+def generate_param(argvs):
     kvs = []
     for k, v in argvs.items():
         kvs.append("%s=%s" % (k, v))
@@ -100,8 +113,13 @@ def address():
 
 
 if __name__ == '__main__':
-    start = sys.argv[1]
+    start = '蟠龙路1366弄'
     company_map = address()
-    for name, end in company_map.items():
-        info = route_info(start, end)
-        print("%s->%s %s" % (start, name, info))
+    start_loc = address_to_location(start)
+    # for name, end in company_map.items():
+    #     end_loc = address_to_location(end)
+    #     info = route_info(start_loc, end_loc)
+    #     print("%s->%s %s" % (start, name, info))
+
+    for each in  search_around(start_loc, 2000, "地铁站"):
+        print(each )
